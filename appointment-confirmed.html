@@ -266,7 +266,23 @@
     }
 
     // ---- Optional appointment note (posts to Zap 3) ----
+    // The email buttons send the same outcome_label ("Completed/Kept") for three different
+    // outcomes, so the stage_id is what tells them apart.
+    const STAGE_INFO = {
+      '257194911': { name: 'Appt Missed/Cancelled',  prompt: 'Anything we should know about why it did not happen?' },
+      '257194912': { name: 'Converting',             prompt: 'What is the next step, and what does the buyer care most about?' },
+      '175145593': { name: 'Sales Nurture - 30 Days', prompt: 'What does the buyer still need before they can decide?' },
+      '48288083':  { name: 'Contract - Send to HB1', prompt: 'Anything to flag before the contract goes out?' }
+    };
+
+    function noteOutcomeName() {
+      const info = STAGE_INFO[stageId];
+      return info ? info.name : (outcomeLabel || '');
+    }
+
     function notePromptFor(label) {
+      const info = STAGE_INFO[stageId];
+      if (info) return info.prompt;
       const l = (label || '').toLowerCase();
       if (/miss|cancel|no show/.test(l))  return 'Anything we should know about why it did not happen?';
       if (/not moving|no deal/.test(l))   return 'What was the main reason they are not moving forward?';
@@ -310,7 +326,7 @@
         deal_id: dealId,
         contact_id: contactId,
         deal_name: dealName || '',
-        outcome_label: outcomeLabel || '',
+        outcome_label: noteOutcomeName(),
         agent: agentName,
         note: note
       });
