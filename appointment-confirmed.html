@@ -214,7 +214,7 @@
 
     <div class="note-section hidden" id="note-section">
       <label class="note-label" for="note-text" id="note-prompt">Add a note about the appointment</label>
-      <p class="note-hint">Optional, but it helps the whole team. Saved to the deal and the contact in HubSpot.</p>
+      <p class="note-hint">Please add a quick note. It takes about 30 seconds and helps the whole team pick up where you left off. Saved to the deal and the contact in HubSpot.</p>
       <textarea id="note-text" maxlength="4000" placeholder="What was discussed, what the buyer cares about, objections, next steps"></textarea>
       <div class="note-footer">
         <span class="char-count" id="char-count">0 / 4000</span>
@@ -238,6 +238,7 @@
     const webhookRaw   = p.get('webhook');
     const contactId    = p.get('contact_id') || '';
     const agentName    = p.get('agent') || '';
+    const ownerId      = p.get('owner_id') || '';
 
     // Zap 3 (Appointment Notes to HubSpot). The note box stays hidden until this is a real URL.
     const NOTE_WEBHOOK_URL = 'https://hooks.zapier.com/hooks/catch/14079935/YWIzi29mZYU7a1I2/';
@@ -328,6 +329,7 @@
         deal_name: dealName || '',
         outcome_label: noteOutcomeName(),
         agent: agentName,
+        owner_id: ownerId,
         note: note
       });
 
