@@ -142,6 +142,49 @@
       margin-bottom: 20px; line-height: 1.5;
     }
 
+    /* Optional appointment note */
+    .note-section {
+      text-align: left; border-top: 1px solid var(--border);
+      padding-top: 22px; margin-bottom: 20px;
+    }
+    .note-label {
+      display: block; font-size: 14px; font-weight: 500;
+      color: var(--text-primary); margin-bottom: 4px;
+    }
+    .note-hint {
+      font-size: 12px; color: var(--text-tertiary);
+      line-height: 1.5; margin-bottom: 10px;
+    }
+    .note-section textarea {
+      width: 100%; min-height: 110px; resize: vertical;
+      padding: 12px 14px; font-family: inherit; font-size: 14px; line-height: 1.5;
+      color: var(--text-primary); background: #fff;
+      border: 1px solid #d6d6d0; border-radius: 10px;
+    }
+    .note-section textarea:focus {
+      outline: none; border-color: var(--check-fill);
+      box-shadow: 0 0 0 3px var(--check-ring);
+    }
+    .note-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-top: 10px;
+    }
+    .char-count { font-size: 11px; color: var(--text-tertiary); }
+    .note-save {
+      font-family: inherit; font-size: 14px; font-weight: 500;
+      padding: 10px 18px; border-radius: 8px; border: none;
+      background: var(--check-fill); color: #fff; cursor: pointer;
+    }
+    .note-save:disabled { background: #c9c9c3; cursor: not-allowed; }
+    .note-status { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .note-status.saved { color: var(--green-text); }
+    .note-status.error { color: var(--red-text); }
+    .hubspot-link {
+      display: inline-block; margin-bottom: 14px; font-size: 13px;
+      color: var(--blue-text); text-decoration: none;
+    }
+    .hubspot-link:hover { text-decoration: underline; }
+
     .hidden { display: none; }
   </style>
 </head>
@@ -169,6 +212,19 @@
       HubSpot couldn't be updated automatically. Please update the deal manually.
     </div>
 
+    <div class="note-section hidden" id="note-section">
+      <label class="note-label" for="note-text" id="note-prompt">Add a note about the appointment</label>
+      <p class="note-hint">Optional, but it helps the whole team. Saved to the deal and the contact in HubSpot.</p>
+      <textarea id="note-text" maxlength="4000" placeholder="What was discussed, what the buyer cares about, objections, next steps"></textarea>
+      <div class="note-footer">
+        <span class="char-count" id="char-count">0 / 4000</span>
+        <button type="button" class="note-save" id="note-save" disabled>Save note</button>
+      </div>
+      <p class="note-status" id="note-status" role="status"></p>
+    </div>
+
+    <a class="hubspot-link hidden" id="hubspot-link" href="#" target="_blank" rel="noopener">Open deal in HubSpot to write more</a>
+
     <p class="close-note hidden" id="close-note">You can close this tab.</p>
   </div>
 
@@ -180,6 +236,12 @@
     const dealId       = p.get('deal_id');
     const stageId      = p.get('stage_id');
     const webhookRaw   = p.get('webhook');
+    const contactId    = p.get('contact_id') || '';
+    const agentName    = p.get('agent') || '';
+
+    // Zap 3 (Appointment Notes to HubSpot). The note box stays hidden until this is a real URL.
+    const NOTE_WEBHOOK_URL = 'https://hooks.zapier.com/hooks/catch/14079935/YWIzi29mZYU7a1I2/';
+    const HUBSPOT_PORTAL_ID = '21785331';
 
     // Populate deal name
     if (dealName) {
@@ -203,6 +265,73 @@
       }
     }
 
+    // ---- Optional appointment note (posts to Zap 3) ----
+    function notePromptFor(label) {
+      const l = (label || '').toLowerCase();
+      if (/miss|cancel|no show/.test(l))  return 'Anything we should know about why it did not happen?';
+      if (/not moving|no deal/.test(l))   return 'What was the main reason they are not moving forward?';
+      if (/contract/.test(l))             return 'Anything to flag before the contract goes out?';
+      if (/converting/.test(l))           return 'What is the next step, and what does the buyer care most about?';
+      if (/nurture|time/.test(l))         return 'What does the buyer still need before they can decide?';
+      return 'Add a note about the appointment';
+    }
+
+    function revealNote() {
+      if (!dealId || !/^\d+$/.test(dealId)) return;
+
+      const link = document.getElementById('hubspot-link');
+      link.href = 'https://app.hubspot.com/contacts/' + HUBSPOT_PORTAL_ID + '/record/0-3/' + encodeURIComponent(dealId);
+      link.classList.remove('hidden');
+
+      if (NOTE_WEBHOOK_URL.indexOf('https://') !== 0) return;
+      document.getElementById('note-prompt').textContent = notePromptFor(outcomeLabel);
+      document.getElementById('note-section').classList.remove('hidden');
+    }
+
+    const noteText   = document.getElementById('note-text');
+    const noteSave   = document.getElementById('note-save');
+    const noteStatus = document.getElementById('note-status');
+
+    noteText.addEventListener('input', function () {
+      document.getElementById('char-count').textContent = noteText.value.length + ' / 4000';
+      noteSave.disabled = noteText.value.trim().length === 0;
+      noteStatus.textContent = '';
+      noteStatus.className = 'note-status';
+    });
+
+    noteSave.addEventListener('click', function () {
+      const note = noteText.value.trim();
+      if (!note) return;
+      noteSave.disabled = true;
+      noteSave.textContent = 'Saving...';
+      noteStatus.textContent = '';
+
+      const body = new URLSearchParams({
+        deal_id: dealId,
+        contact_id: contactId,
+        deal_name: dealName || '',
+        outcome_label: outcomeLabel || '',
+        agent: agentName,
+        note: note
+      });
+
+      fetch(NOTE_WEBHOOK_URL, { method: 'POST', mode: 'no-cors', body: body })
+        .then(function () {
+          noteStatus.textContent = 'Note sent. You can add another one if you like.';
+          noteStatus.className = 'note-status saved';
+          noteText.value = '';
+          document.getElementById('char-count').textContent = '0 / 4000';
+          noteSave.textContent = 'Save note';
+          noteSave.disabled = true;
+        })
+        .catch(function () {
+          noteStatus.textContent = 'Could not send the note. Your text is still here, please try again.';
+          noteStatus.className = 'note-status error';
+          noteSave.textContent = 'Save note';
+          noteSave.disabled = false;
+        });
+    });
+
     function showSuccess() {
       const wrap = document.getElementById('icon-wrap');
       wrap.className = 'icon-wrap success';
@@ -210,6 +339,7 @@
       document.getElementById('heading').textContent = 'Got it, thanks!';
       document.getElementById('subtitle').textContent = 'Your response has been recorded and HubSpot has been updated automatically.';
       document.getElementById('close-note').classList.remove('hidden');
+      revealNote();
     }
 
     function showMissed() {
@@ -219,6 +349,7 @@
       document.getElementById('heading').textContent = 'Got it, thanks!';
       document.getElementById('subtitle').textContent = 'HubSpot has been updated automatically.';
       document.getElementById('close-note').classList.remove('hidden');
+      revealNote();
     }
 
     function showError() {
